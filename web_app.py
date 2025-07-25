@@ -1,95 +1,78 @@
+import os
 from flask import Flask, render_template, request, jsonify
+from stock_data_fetcher import StockDataFetcher
 from stock_trading_analyzer import StockTradingAnalyzer
 from chatgpt_analyzer import ChatGPTAnalyzer
-import json
-import os
-from datetime import datetime
 
 app = Flask(__name__)
+app.debug = False
 
-# API 키 설정 (환경변수에서 가져오기)
+# 환경변수에서 API 키 가져오기
 CHATGPT_API_KEY = os.environ.get('CHATGPT_API_KEY')
-
 if not CHATGPT_API_KEY:
-    raise ValueError("CHATGPT_API_KEY 환경변수가 설정되지 않았습니다. Vercel 대시보드에서 환경변수를 설정해주세요.")
+    print("⚠️ CHATGPT_API_KEY 환경변수가 설정되지 않았습니다.")
 
 # 분석기 초기화
-analyzer = StockTradingAnalyzer()
-chatgpt_analyzer = ChatGPTAnalyzer(CHATGPT_API_KEY)
+stock_fetcher = StockDataFetcher()
+trading_analyzer = StockTradingAnalyzer()
+chatgpt_analyzer = ChatGPTAnalyzer()
 
 @app.route('/')
 def index():
-    """메인 페이지"""
     return render_template('index.html')
 
 @app.route('/analyze', methods=['POST'])
-def analyze_stock():
-    """주식 분석 API 엔드포인트"""
+def analyze():
     try:
         data = request.get_json()
         symbol = data.get('symbol', 'AAPL').upper()
-        period = data.get('period', '1y')
         
-        # 주식 분석 실행
-        result = analyzer.analyze_stock(symbol, period)
+        print(f"🔍 {symbol} 주식 분석 시작...")
         
-        if "error" in result:
-            return jsonify({"error": result["error"]}), 400
+        # 주식 데이터 가져오기
+        stock_data = stock_fetcher.fetch_stock_data(symbol)
+        if stock_data.empty:
+            return jsonify({'error': f'{symbol} 주식 데이터를 가져올 수 없습니다.'}), 400
         
-        # ChatGPT 전문가 분석
-        stock_info = result["stock_info"]
-        signals = result["signals"]
+        # 신호 생성
+        signal_result = stock_fetcher.generate_signals(stock_data)
+        if signal_result['insufficient']:
+            return jsonify({'error': f'{symbol} 분석에 필요한 충분한 데이터가 없습니다.'}), 400
         
-        # ChatGPT 분석을 위한 데이터 준비
+        # 신호 분석
+        analysis_result = trading_analyzer.analyze_signals(
+            signal_result['signals'], 
+            signal_result['scores'], 
+            signal_result['insufficient']
+        )
+        
+        # ChatGPT 전문가 요약 생성
         stock_data_for_chatgpt = {
-            'symbol': symbol,
-            'current_price': stock_info['latest_price'],
-            'analysis_date': stock_info['latest_date'],
-            'interpreted_signals': result["interpreted_signals"],
-            'total_score': result.get("total_score", 0),
-            'recommendation': result.get("recommendation", "HOLD")
+            'interpreted_signals': analysis_result['interpreted_signals'],
+            'total_score': analysis_result['total_score'],
+            'recommendation': analysis_result['recommendation']
         }
         
         expert_summary = chatgpt_analyzer.generate_expert_summary(stock_data_for_chatgpt)
         
-        # 결과 데이터 구성
-        analysis_result = {
-            "symbol": symbol,
-            "stock_info": stock_info,
-            "signals": signals,
-            "scores": result.get("scores", {}),
-            "total_score": result.get("total_score", 0),
-            "recommendation": result.get("recommendation", "HOLD"),
-            "interpreted_signals": result["interpreted_signals"],
-            "expert_summary": expert_summary,
-            "analysis_date": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # 결과 반환
+        result = {
+            'symbol': symbol,
+            'signals': signal_result['signals'],
+            'scores': signal_result['scores'],
+            'total_score': analysis_result['total_score'],
+            'recommendation': analysis_result['recommendation'],
+            'interpreted_signals': analysis_result['interpreted_signals'],
+            'expert_summary': expert_summary
         }
         
-        return jsonify(analysis_result)
+        print(f"✅ {symbol} 분석 완료")
+        return jsonify(result)
         
     except Exception as e:
-        return jsonify({"error": f"분석 중 오류 발생: {str(e)}"}), 500
-
-@app.route('/api/symbols')
-def get_popular_symbols():
-    """인기 주식 심볼 목록"""
-    popular_symbols = [
-        {"symbol": "AAPL", "name": "Apple Inc.", "sector": "Technology"},
-        {"symbol": "GOOGL", "name": "Alphabet Inc.", "sector": "Technology"},
-        {"symbol": "MSFT", "name": "Microsoft Corporation", "sector": "Technology"},
-        {"symbol": "TSLA", "name": "Tesla Inc.", "sector": "Automotive"},
-        {"symbol": "AMZN", "name": "Amazon.com Inc.", "sector": "Consumer Discretionary"},
-        {"symbol": "NVDA", "name": "NVIDIA Corporation", "sector": "Technology"},
-        {"symbol": "META", "name": "Meta Platforms Inc.", "sector": "Technology"},
-        {"symbol": "NFLX", "name": "Netflix Inc.", "sector": "Communication Services"},
-        {"symbol": "JPM", "name": "JPMorgan Chase & Co.", "sector": "Financial"},
-        {"symbol": "JNJ", "name": "Johnson & Johnson", "sector": "Healthcare"}
-    ]
-    return jsonify(popular_symbols)
-
-# Vercel 배포를 위한 app 객체 export
-app.debug = False
+        print(f"❌ 분석 중 오류 발생: {str(e)}")
+        return jsonify({'error': f'분석 중 오류 발생: {str(e)}'}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port) 
+    app.run(host='0.0.0.0', port=port, debug=False) 
