@@ -15,7 +15,7 @@ if not CHATGPT_API_KEY:
 # 분석기 초기화
 stock_fetcher = StockDataFetcher()
 trading_analyzer = StockTradingAnalyzer()
-chatgpt_analyzer = ChatGPTAnalyzer()
+chatgpt_analyzer = ChatGPTAnalyzer(CHATGPT_API_KEY)
 
 @app.route('/')
 def index():
