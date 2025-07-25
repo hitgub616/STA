@@ -3,6 +3,12 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple, Any
+import logging
+import requests
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class StockDataFetcher:
     """
@@ -22,11 +28,12 @@ class StockDataFetcher:
     
     def __init__(self):
         """
-        주식 데이터 가져오기 초기화
+        클라우드 환경에서 yfinance 차단을 우회하기 위해 세션을 초기화합니다.
         """
-        pass
+        self.session = requests.Session()
+        self.session.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     
-    def fetch_stock_data(self, symbol: str, period: str = "1y") -> pd.DataFrame:
+    def fetch_stock_data(self, symbol: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame:
         """
         주식 데이터를 가져오는 함수
         
@@ -39,31 +46,31 @@ class StockDataFetcher:
         """
         try:
             # 최대 필요한 윈도우 + 50일 버퍼로 충분한 데이터 확보
-            max_window = max(self.REQUIRED_DATA_WINDOW.values())
-            required_days = max_window + 50
+            max_window = max(self.REQUIRED_DATA_WINDOW.values()) if self.REQUIRED_DATA_WINDOW else 250
             
             # period를 required_days에 맞게 조정
-            if required_days > 250:
+            if max_window + 50 > 250:
                 period = "2y"
-            elif required_days > 125:
+            elif max_window + 50 > 125:
                 period = "1y"
-            elif required_days > 60:
+            elif max_window + 50 > 60:
                 period = "6mo"
             else:
                 period = "3mo"
             
-            print(f"📊 {symbol} 데이터 요청: {period} (최소 {required_days}일 필요)")
+            print(f"📊 {symbol} 데이터 요청: {period} (최소 {max_window + 50}일 필요)")
             
-            stock = yf.Ticker(symbol)
-            data = stock.history(period=period)
+            # yfinance 호출 시, 생성자에서 만든 세션을 사용합니다.
+            stock = yf.Ticker(symbol, session=self.session)
+            data = stock.history(period=f"{max_window + 50}d", interval=interval)
             
-            if len(data) < required_days:
-                print(f"⚠️  경고: {symbol} 데이터가 부족합니다. 요청: {required_days}일, 실제: {len(data)}일")
+            if len(data) < max_window + 50:
+                print(f"⚠️  경고: {symbol} 데이터가 부족합니다. 요청: {max_window + 50}일, 실제: {len(data)}일")
                 # 더 긴 기간으로 재시도
                 if period != "2y":
                     print(f"🔄 더 긴 기간으로 재시도 중...")
                     data = stock.history(period="2y")
-                    if len(data) < required_days:
+                    if len(data) < max_window + 50:
                         print(f"❌ {symbol} 데이터가 여전히 부족합니다. 일부 지표가 제한될 수 있습니다.")
             
             print(f"✅ {symbol} 주식 데이터 가져오기 완료 ({len(data)}일치 데이터)")
