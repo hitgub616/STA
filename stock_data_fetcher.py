@@ -1,10 +1,9 @@
-import yfinance as yf
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
-from typing import Dict, Optional, Tuple, Any
-import logging
 import requests
+import time
+from datetime import datetime, timedelta
+import logging
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -30,61 +29,41 @@ class StockDataFetcher:
         """
         클라우드 환경에서 yfinance 차단을 우회하기 위해 세션을 초기화합니다.
         """
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-        })
+        pass  # 세션 불필요
     
     def fetch_stock_data(self, symbol: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame:
         """
-        주식 데이터를 가져오는 함수
-        
-        Args:
-            symbol (str): 주식 심볼
-            period (str): 데이터 기간
-            
-        Returns:
-            pd.DataFrame: 주식 데이터
+        Yahoo Finance CSV API를 직접 사용하여 주식 데이터를 가져옵니다.
         """
         try:
-            # 최대 필요한 윈도우 + 50일 버퍼로 충분한 데이터 확보
-            max_window = max(self.REQUIRED_DATA_WINDOW.values()) if self.REQUIRED_DATA_WINDOW else 250
-            
-            # period를 required_days에 맞게 조정
-            if max_window + 50 > 250:
-                period = "2y"
-            elif max_window + 50 > 125:
-                period = "1y"
-            elif max_window + 50 > 60:
-                period = "6mo"
+            # 기간 계산
+            end = int(time.time())
+            if period == "1y":
+                start = int((datetime.now() - timedelta(days=365)).timestamp())
+            elif period == "2y":
+                start = int((datetime.now() - timedelta(days=730)).timestamp())
+            elif period == "6mo":
+                start = int((datetime.now() - timedelta(days=182)).timestamp())
             else:
-                period = "3mo"
-            
-            print(f"📊 {symbol} 데이터 요청: {period} (최소 {max_window + 50}일 필요)")
-            
-            # yfinance 호출 시, 생성자에서 만든 세션을 사용합니다.
-            stock = yf.Ticker(symbol, session=self.session)
-            data = stock.history(period=f"{max_window + 50}d", interval=interval)
-            
-            if len(data) < max_window + 50:
-                print(f"⚠️  경고: {symbol} 데이터가 부족합니다. 요청: {max_window + 50}일, 실제: {len(data)}일")
-                # 더 긴 기간으로 재시도
-                if period != "2y":
-                    print(f"🔄 더 긴 기간으로 재시도 중...")
-                    data = stock.history(period="2y")
-                    if len(data) < max_window + 50:
-                        print(f"❌ {symbol} 데이터가 여전히 부족합니다. 일부 지표가 제한될 수 있습니다.")
-            
-            print(f"✅ {symbol} 주식 데이터 가져오기 완료 ({len(data)}일치 데이터)")
-            print(f"   기간: {data.index[0].strftime('%Y-%m-%d')} ~ {data.index[-1].strftime('%Y-%m-%d')}")
-            print(f"   최신 가격: ${data['Close'].iloc[-1]:.2f}")
-            
-            return data
-            
+                start = int((datetime.now() - timedelta(days=90)).timestamp())
+
+            url = f"https://query1.finance.yahoo.com/v7/finance/download/{symbol}?period1={start}&period2={end}&interval={interval}&events=history&includeAdjustedClose=true"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+            }
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            from io import StringIO
+            df = pd.read_csv(StringIO(response.text))
+            if df.empty:
+                print(f"❌ {symbol} 데이터가 비어 있습니다.")
+            else:
+                print(f"✅ {symbol} CSV 데이터 가져오기 완료 ({len(df)}일치 데이터)")
+            return df
         except Exception as e:
-            print(f"❌ {symbol} 데이터 가져오기 실패: {str(e)}")
+            print(f"❌ {symbol} CSV 데이터 가져오기 실패: {str(e)}")
             return pd.DataFrame()
     
     def get_indicator_data(self, data: pd.DataFrame, indicator: str) -> pd.DataFrame:
