@@ -4,6 +4,7 @@ import requests
 import time
 from datetime import datetime, timedelta
 import logging
+from typing import Tuple
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
