@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stock-trading-analyzer"
+version = "1.0.0"
+description = "Stock Trading Analyzer with AI-powered expert summaries"
+requires-python = ">=3.11,<3.12"
+
+[tool.setuptools]
+packages = ["."] 
