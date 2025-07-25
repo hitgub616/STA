@@ -1,10 +1,9 @@
-import pandas as pd
-import numpy as np
 import requests
-import time
+import pandas as pd
+import os
 from datetime import datetime, timedelta
-import logging
 from typing import Tuple, Dict, Any
+import logging
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -28,43 +27,64 @@ class StockDataFetcher:
     
     def __init__(self):
         """
-        클라우드 환경에서 yfinance 차단을 우회하기 위해 세션을 초기화합니다.
+        API 키를 초기화합니다.
         """
-        pass  # 세션 불필요
+        self.api_key = os.environ.get('FMP_API_KEY')
+        if not self.api_key:
+            raise ValueError("FMP_API_KEY 환경변수가 설정되지 않았습니다.")
+        pass
     
     def fetch_stock_data(self, symbol: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame:
         """
-        Yahoo Finance CSV API를 직접 사용하여 주식 데이터를 가져옵니다.
+        Financial Modeling Prep API를 사용하여 주식 데이터를 가져옵니다.
         """
         try:
-            # 기간 계산
-            end = int(time.time())
+            # 기간 계산 (FMP는 날짜 기반 from/to를 사용)
+            end_date = datetime.now()
             if period == "1y":
-                start = int((datetime.now() - timedelta(days=365)).timestamp())
+                start_date = end_date - timedelta(days=365)
             elif period == "2y":
-                start = int((datetime.now() - timedelta(days=730)).timestamp())
+                start_date = end_date - timedelta(days=730)
             elif period == "6mo":
-                start = int((datetime.now() - timedelta(days=182)).timestamp())
-            else:
-                start = int((datetime.now() - timedelta(days=90)).timestamp())
+                start_date = end_date - timedelta(days=182)
+            else: # 3mo or 1mo
+                start_date = end_date - timedelta(days=90)
+            
+            start_date_str = start_date.strftime('%Y-%m-%d')
+            end_date_str = end_date.strftime('%Y-%m-%d')
+            
+            # FMP API URL 구성
+            url = f"https://financialmodelingprep.com/api/v3/historical-price-full/{symbol}?from={start_date_str}&to={end_date_str}&apikey={self.api_key}"
+            
+            response = requests.get(url)
+            response.raise_for_status() # 오류 발생 시 예외 처리
+            
+            data = response.json()
+            
+            if not data or 'historical' not in data:
+                print(f"❌ {symbol} 데이터를 가져오는데 실패했습니다. API 응답이 비어있습니다.")
+                return pd.DataFrame()
 
-            url = f"https://query1.finance.yahoo.com/v7/finance/download/{symbol}?period1={start}&period2={end}&interval={interval}&events=history&includeAdjustedClose=true"
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-            }
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-            from io import StringIO
-            df = pd.read_csv(StringIO(response.text))
+            # Pandas DataFrame으로 변환
+            df = pd.DataFrame(data['historical'])
             if df.empty:
                 print(f"❌ {symbol} 데이터가 비어 있습니다.")
-            else:
-                print(f"✅ {symbol} CSV 데이터 가져오기 완료 ({len(df)}일치 데이터)")
+                return pd.DataFrame()
+
+            # FMP 데이터 형식에 맞게 컬럼 이름 변경 및 형식 변환
+            df = df.rename(columns={'date': 'Date', 'adjClose': 'Adj Close', 'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'})
+            df['Date'] = pd.to_datetime(df['Date'])
+            df = df.set_index('Date')
+            df = df.sort_index() # 날짜 오름차순으로 정렬
+            
+            print(f"✅ {symbol} FMP API 데이터 가져오기 완료 ({len(df)}일치 데이터)")
             return df
+            
+        except requests.exceptions.HTTPError as http_err:
+            print(f"❌ HTTP 오류 발생: {http_err} - API 키가 유효한지, 요청 제한을 초과하지 않았는지 확인하세요.")
+            return pd.DataFrame()
         except Exception as e:
-            print(f"❌ {symbol} CSV 데이터 가져오기 실패: {str(e)}")
+            print(f"❌ {symbol} FMP API 데이터 가져오기 실패: {str(e)}")
             return pd.DataFrame()
     
     def get_indicator_data(self, data: pd.DataFrame, indicator: str) -> pd.DataFrame:
