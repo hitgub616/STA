@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatGPT 파싱 디버깅</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .input { width: 100%; height: 200px; }
+        .output { background: #f5f5f5; padding: 10px; border-radius: 5px; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>ChatGPT 응답 파싱 디버깅</h1>
+    
+    <div class="section">
+        <h3>ChatGPT 응답 입력:</h3>
+        <textarea class="input" id="chatgptResponse">
+🧠 전문가적 종합평가:
+
+현재 AAPL의 기술적 지표들은 대부분 중립적인 신호를 나타내고 있으며, ADX 지표에 따르면 시장은 트렌드를 형성하고 있습니다. OBV가 누적되는 모습을 보이고 있어 매수세가 조금씩 증가하고 있는 것으로 판단되며, 엘리엇 파동 이론에서는 상승 추세의 중간인 파동 3에 위치한 것으로 보입니다.
+                                       
+📈 투자자별 전략 제안:
+
+👤 주식 미보유자:
+지금은 큰 가격 변동이 없는 상태이므로 관망을 추천합니다. 그러나 매수세가 증가하고 있는 만큼, 추세가 명확해지면 매수 기회를 노려보세요.                                                                                  
+💼 주식 보유자:
+현재 보유를 유지하며 추세를 지켜보는 것이 좋습니다. 시장이 안정적으로 상승하는 경우 추가 매수를 고려할 수 있습니다.
+        </textarea>
+    </div>
+    
+    <button onclick="testParsing()">파싱 테스트</button>
+    
+    <div class="section">
+        <h3>파싱 결과:</h3>
+        <div class="output" id="parsingResult"></div>
+    </div>
+
+    <script>
+        function parseExpertSummary(summary) {
+            const parts = {
+                summary: '',
+                nonHolder: '',
+                holder: ''
+            };
+
+            console.log('Parsing summary:', summary);
+
+            // 전문가 종합평가 추출
+            let summaryText = '';
+            
+            // 방법 1: 정확한 형식 매칭 (큰따옴표 없이)
+            const summaryMatch = summary.match(/🧠 전문가 종합평가:\s*\n\n([\s\S]*?)(?=\n\n📈|$)/);
+            if (summaryMatch) {
+                summaryText = summaryMatch[1].trim();
+            } else {
+                // 방법 2: 전문가 종합평가 다음 텍스트 찾기
+                const summaryIndex = summary.indexOf('🧠 전문가 종합평가:');
+                if (summaryIndex !== -1) {
+                    const afterSummary = summary.substring(summaryIndex);
+                    const nextSectionIndex = afterSummary.indexOf('📈 투자자별 전략 제안:');
+                    if (nextSectionIndex !== -1) {
+                        summaryText = afterSummary.substring(afterSummary.indexOf('\n\n') + 2, nextSectionIndex).trim();
+                    } else {
+                        summaryText = afterSummary.substring(afterSummary.indexOf('\n\n') + 2).trim();
+                    }
+                }
+            }
+            
+            parts.summary = summaryText;
+
+            // 미보유자 전략 추출 (큰따옴표 없이)
+            let nonHolderText = '';
+            const nonHolderMatch = summary.match(/👤 주식 미보유자:\s*\n([^\n]+)/);
+            if (nonHolderMatch) {
+                nonHolderText = nonHolderMatch[1].trim();
+            } else {
+                // 대체 방법: 미보유자 섹션 찾기
+                const nonHolderIndex = summary.indexOf('👤 주식 미보유자:');
+                if (nonHolderIndex !== -1) {
+                    const afterNonHolder = summary.substring(nonHolderIndex);
+                    const nextLineIndex = afterNonHolder.indexOf('\n', afterNonHolder.indexOf('\n') + 1);
+                    if (nextLineIndex !== -1) {
+                        nonHolderText = afterNonHolder.substring(afterNonHolder.indexOf('\n') + 1, nextLineIndex).trim();
+                    } else {
+                        nonHolderText = afterNonHolder.substring(afterNonHolder.indexOf('\n') + 1).trim();
+                    }
+                }
+            }
+            
+            parts.nonHolder = nonHolderText;
+
+            // 보유자 전략 추출 (큰따옴표 없이)
+            let holderText = '';
+            const holderMatch = summary.match(/💼 주식 보유자:\s*\n([^\n]+)/);
+            if (holderMatch) {
+                holderText = holderMatch[1].trim();
+            } else {
+                // 대체 방법: 보유자 섹션 찾기
+                const holderIndex = summary.indexOf('💼 주식 보유자:');
+                if (holderIndex !== -1) {
+                    const afterHolder = summary.substring(holderIndex);
+                    const nextLineIndex = afterHolder.indexOf('\n', afterHolder.indexOf('\n') + 1);
+                    if (nextLineIndex !== -1) {
+                        holderText = afterHolder.substring(afterHolder.indexOf('\n') + 1, nextLineIndex).trim();
+                    } else {
+                        holderText = afterHolder.substring(afterHolder.indexOf('\n') + 1).trim();
+                    }
+                }
+            }
+            
+            parts.holder = holderText;
+
+            // 파싱 실패 시 대체 방법: 전체 텍스트를 섹션별로 분할
+            if (!parts.summary || !parts.nonHolder || !parts.holder) {
+                console.log('Primary parsing failed, trying alternative method...');
+                
+                const lines = summary.split('\n');
+                let currentSection = '';
+                let summaryLines = [];
+                let nonHolderLines = [];
+                let holderLines = [];
+                
+                for (let line of lines) {
+                    line = line.trim();
+                    if (line.includes('🧠 전문가 종합평가:')) {
+                        currentSection = 'summary';
+                        continue;
+                    } else if (line.includes('👤 주식 미보유자:')) {
+                        currentSection = 'nonHolder';
+                        continue;
+                    } else if (line.includes('💼 주식 보유자:')) {
+                        currentSection = 'holder';
+                        continue;
+                    } else if (line.includes('📈 투자자별 전략 제안:')) {
+                        currentSection = '';
+                        continue;
+                    }
+                    
+                    if (line && currentSection === 'summary') {
+                        summaryLines.push(line);
+                    } else if (line && currentSection === 'nonHolder') {
+                        nonHolderLines.push(line);
+                    } else if (line && currentSection === 'holder') {
+                        holderLines.push(line);
+                    }
+                }
+                
+                if (!parts.summary && summaryLines.length > 0) {
+                    parts.summary = summaryLines.join(' ');
+                }
+                if (!parts.nonHolder && nonHolderLines.length > 0) {
+                    parts.nonHolder = nonHolderLines.join(' ');
+                }
+                if (!parts.holder && holderLines.length > 0) {
+                    parts.holder = holderLines.join(' ');
+                }
+            }
+
+            console.log('Final parsed parts:', parts);
+            return parts;
+        }
+
+        function testParsing() {
+            const input = document.getElementById('chatgptResponse').value;
+            const result = parseExpertSummary(input);
+            
+            document.getElementById('parsingResult').innerHTML = `
+                <h4>파싱 결과:</h4>
+                <p><strong>전문가 종합평가:</strong> ${result.summary || '파싱 실패'}</p>
+                <p><strong>미보유자 전략:</strong> ${result.nonHolder || '파싱 실패'}</p>
+                <p><strong>보유자 전략:</strong> ${result.holder || '파싱 실패'}</p>
+            `;
+        }
+    </script>
+</body>
+</html> 

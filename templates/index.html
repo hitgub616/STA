@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>주식 기술적 분석 시스템</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #64748b;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --dark-color: #1e293b;
+            --light-color: #f8fafc;
+        }
+
+        body {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .main-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            margin: 2rem auto;
+            max-width: 1200px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--dark-color), #334155);
+            color: white;
+            padding: 2rem;
+            border-radius: 20px 20px 0 0;
+            text-align: center;
+        }
+
+        .search-section {
+            padding: 2rem;
+            background: var(--light-color);
+        }
+
+        .analysis-section {
+            padding: 2rem;
+        }
+
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .signal-card {
+            background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .signal-neutral {
+            border-left-color: var(--secondary-color);
+        }
+
+        .signal-buy {
+            border-left-color: var(--success-color);
+        }
+
+        .signal-sell {
+            border-left-color: var(--danger-color);
+        }
+
+        .signal-trending {
+            border-left-color: var(--warning-color);
+        }
+
+        .expert-summary {
+            background: linear-gradient(135deg, #1e293b, #334155);
+            color: white;
+            border-radius: 15px;
+            padding: 2rem;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .popular-symbols {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .symbol-tag {
+            background: var(--primary-color);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        .symbol-tag:hover {
+            background: #1d4ed8;
+            transform: scale(1.05);
+        }
+
+        .price-display {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .indicator-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .strategy-section {
+            background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .strategy-card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            border-left: 4px solid var(--success-color);
+        }
+
+        .strategy-card.holder {
+            border-left-color: var(--primary-color);
+        }
+
+        .strategy-card.non-holder {
+            border-left-color: var(--warning-color);
+        }
+
+        .signal-insufficient {
+            border-left: 4px solid #ffc107;
+            background: linear-gradient(135deg, rgba(255, 193, 7, 0.1), rgba(255, 193, 7, 0.05));
+        }
+        
+        .signal-insufficient .card-title {
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="main-container">
+            <!-- 헤더 -->
+            <div class="header">
+                <h1><i class="fas fa-chart-line"></i> 주식 기술적 분석 시스템</h1>
+                <p class="mb-0">AI 기반 전문가 분석으로 스마트한 투자 결정을 도와드립니다</p>
+            </div>
+
+            <!-- 검색 섹션 -->
+            <div class="search-section">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label for="symbolInput" class="form-label fw-bold">주식 심볼</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control form-control-lg" id="symbolInput" 
+                                   placeholder="예: AAPL, GOOGL, TSLA" value="AAPL">
+                            <button class="btn btn-primary btn-lg" type="button" onclick="analyzeStock()">
+                                <i class="fas fa-search"></i> 분석하기
+                            </button>
+                        </div>
+                        
+                        <div class="popular-symbols">
+                            <small class="text-muted me-2">인기 주식:</small>
+                            <span class="symbol-tag" onclick="setSymbol('AAPL')">AAPL</span>
+                            <span class="symbol-tag" onclick="setSymbol('GOOGL')">GOOGL</span>
+                            <span class="symbol-tag" onclick="setSymbol('MSFT')">MSFT</span>
+                            <span class="symbol-tag" onclick="setSymbol('TSLA')">TSLA</span>
+                            <span class="symbol-tag" onclick="setSymbol('NVDA')">NVDA</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="periodSelect" class="form-label fw-bold">분석 기간</label>
+                        <select class="form-select form-select-lg" id="periodSelect">
+                            <option value="1mo">1개월</option>
+                            <option value="3mo">3개월</option>
+                            <option value="6mo">6개월</option>
+                            <option value="1y" selected>1년</option>
+                            <option value="2y">2년</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 로딩 -->
+            <div class="loading" id="loading">
+                <div class="spinner mx-auto mb-3"></div>
+                <h5>AI가 주식을 분석하고 있습니다...</h5>
+                <p class="text-muted">잠시만 기다려주세요</p>
+            </div>
+
+            <!-- 분석 결과 섹션 -->
+            <div class="analysis-section" id="analysisSection" style="display: none;">
+                <!-- 주식 기본 정보 -->
+                <div class="card mb-4">
+                    <div class="card-body text-center">
+                        <h2 id="stockSymbol" class="mb-3"></h2>
+                        <div class="price-display" id="stockPrice"></div>
+                        <p class="text-muted" id="analysisDate"></p>
+                    </div>
+                </div>
+
+                <!-- 전문가 종합평가 -->
+                <div class="expert-summary mb-4">
+                    <div id="expertSummary" style="font-size: 1.1em; line-height: 1.6;"></div>
+                </div>
+
+                <!-- 투자자별 전략 -->
+                <div class="strategy-section">
+                    <h4><i class="fas fa-users"></i> 투자자별 전략 제안</h4>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="strategy-card non-holder">
+                                <h5><i class="fas fa-user-plus"></i> 주식 미보유자</h5>
+                                <div id="nonHolderStrategy"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="strategy-card holder">
+                                <h5><i class="fas fa-user-check"></i> 주식 보유자</h5>
+                                <div id="holderStrategy"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 기술적 지표 -->
+                <div class="mt-4">
+                    <h4><i class="fas fa-chart-bar"></i> 기술적 지표 분석</h4>
+                    <div class="indicator-grid" id="indicatorGrid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function setSymbol(symbol) {
+            document.getElementById('symbolInput').value = symbol;
+        }
+
+        function analyzeStock() {
+            const symbol = document.getElementById('symbolInput').value.trim().toUpperCase();
+            const period = document.getElementById('periodSelect').value;
+            
+            if (!symbol) {
+                alert('주식 심볼을 입력해주세요.');
+                return;
+            }
+
+            // 로딩 표시
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('analysisSection').style.display = 'none';
+
+            // API 호출
+            fetch('/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    symbol: symbol,
+                    period: period
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('분석 중 오류가 발생했습니다: ' + data.error);
+                    return;
+                }
+                displayResults(data);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('분석 중 오류가 발생했습니다.');
+            })
+            .finally(() => {
+                document.getElementById('loading').style.display = 'none';
+            });
+        }
+
+        function displayResults(data) {
+            // 기본 정보 표시
+            document.getElementById('stockSymbol').textContent = data.symbol;
+            document.getElementById('stockPrice').textContent = `$${parseFloat(data.stock_info.latest_price).toFixed(2)}`;
+            document.getElementById('analysisDate').textContent = `분석일: ${data.analysis_date}`;
+
+            // 종합 추천 표시
+            const recommendation = data.recommendation || 'HOLD';
+            const totalScore = data.total_score || 0;
+            const recommendationText = getRecommendationText(recommendation);
+            const scoreColor = getScoreColor(totalScore);
+            
+            document.getElementById('stockSymbol').innerHTML = `
+                ${data.symbol}
+                <div class="recommendation-badge" style="background: ${scoreColor}; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.8em; margin-top: 8px; display: inline-block;">
+                    ${recommendationText} (점수: ${totalScore})
+                </div>
+            `;
+
+            // 전문가 종합평가 전체 텍스트 표시 (파싱 없이)
+            const summary = data.expert_summary;
+            const summaryHtml = summary.replace(/\n/g, '<br>');
+            document.getElementById('expertSummary').innerHTML = `
+                <div class="expert-summary-text">
+                    <pre style="white-space: pre-wrap; font-family: inherit; margin: 0; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 8px; line-height: 1.6; color: white;">${summaryHtml}</pre>
+                </div>
+            `;
+            
+            // 투자자별 전략 제안 섹션 숨기기 (전문가 종합평가에 포함됨)
+            document.querySelector('.strategy-section').style.display = 'none';
+
+            // 기술적 지표 표시 (점수 포함)
+            displayIndicators(data.interpreted_signals, data.scores);
+
+            // 결과 섹션 표시
+            document.getElementById('analysisSection').style.display = 'block';
+        }
+
+        function parseExpertSummary(summary) {
+            const parts = {
+                summary: '',
+                nonHolder: '',
+                holder: ''
+            };
+
+            console.log('Parsing summary:', summary);
+
+            // 전문가 종합평가 추출
+            let summaryText = '';
+            
+            // 방법 1: 정확한 형식 매칭 (큰따옴표 없이)
+            const summaryMatch = summary.match(/🧠 전문가 종합평가:\s*\n\n([\s\S]*?)(?=\n\n📈|$)/);
+            if (summaryMatch) {
+                summaryText = summaryMatch[1].trim();
+            } else {
+                // 방법 2: 전문가 종합평가 다음 텍스트 찾기
+                const summaryIndex = summary.indexOf('🧠 전문가 종합평가:');
+                if (summaryIndex !== -1) {
+                    const afterSummary = summary.substring(summaryIndex);
+                    const nextSectionIndex = afterSummary.indexOf('📈 투자자별 전략 제안:');
+                    if (nextSectionIndex !== -1) {
+                        summaryText = afterSummary.substring(afterSummary.indexOf('\n\n') + 2, nextSectionIndex).trim();
+                    } else {
+                        summaryText = afterSummary.substring(afterSummary.indexOf('\n\n') + 2).trim();
+                    }
+                }
+            }
+            
+            parts.summary = summaryText;
+
+            // 미보유자 전략 추출 (큰따옴표 없이)
+            let nonHolderText = '';
+            const nonHolderMatch = summary.match(/👤 주식 미보유자:\s*\n([^\n]+)/);
+            if (nonHolderMatch) {
+                nonHolderText = nonHolderMatch[1].trim();
+            } else {
+                // 대체 방법: 미보유자 섹션 찾기
+                const nonHolderIndex = summary.indexOf('👤 주식 미보유자:');
+                if (nonHolderIndex !== -1) {
+                    const afterNonHolder = summary.substring(nonHolderIndex);
+                    const nextLineIndex = afterNonHolder.indexOf('\n', afterNonHolder.indexOf('\n') + 1);
+                    if (nextLineIndex !== -1) {
+                        nonHolderText = afterNonHolder.substring(afterNonHolder.indexOf('\n') + 1, nextLineIndex).trim();
+                    } else {
+                        nonHolderText = afterNonHolder.substring(afterNonHolder.indexOf('\n') + 1).trim();
+                    }
+                }
+            }
+            
+            parts.nonHolder = nonHolderText;
+
+            // 보유자 전략 추출 (큰따옴표 없이)
+            let holderText = '';
+            const holderMatch = summary.match(/💼 주식 보유자:\s*\n([^\n]+)/);
+            if (holderMatch) {
+                holderText = holderMatch[1].trim();
+            } else {
+                // 대체 방법: 보유자 섹션 찾기
+                const holderIndex = summary.indexOf('💼 주식 보유자:');
+                if (holderIndex !== -1) {
+                    const afterHolder = summary.substring(holderIndex);
+                    const nextLineIndex = afterHolder.indexOf('\n', afterHolder.indexOf('\n') + 1);
+                    if (nextLineIndex !== -1) {
+                        holderText = afterHolder.substring(afterHolder.indexOf('\n') + 1, nextLineIndex).trim();
+                    } else {
+                        holderText = afterHolder.substring(afterHolder.indexOf('\n') + 1).trim();
+                    }
+                }
+            }
+            
+            parts.holder = holderText;
+
+            // 파싱 실패 시 대체 방법: 전체 텍스트를 섹션별로 분할
+            if (!parts.summary || !parts.nonHolder || !parts.holder) {
+                console.log('Primary parsing failed, trying alternative method...');
+                
+                const lines = summary.split('\n');
+                let currentSection = '';
+                let summaryLines = [];
+                let nonHolderLines = [];
+                let holderLines = [];
+                
+                for (let line of lines) {
+                    line = line.trim();
+                    if (line.includes('🧠 전문가 종합평가:')) {
+                        currentSection = 'summary';
+                        continue;
+                    } else if (line.includes('👤 주식 미보유자:')) {
+                        currentSection = 'nonHolder';
+                        continue;
+                    } else if (line.includes('💼 주식 보유자:')) {
+                        currentSection = 'holder';
+                        continue;
+                    } else if (line.includes('📈 투자자별 전략 제안:')) {
+                        currentSection = '';
+                        continue;
+                    }
+                    
+                    if (line && currentSection === 'summary') {
+                        summaryLines.push(line);
+                    } else if (line && currentSection === 'nonHolder') {
+                        nonHolderLines.push(line);
+                    } else if (line && currentSection === 'holder') {
+                        holderLines.push(line);
+                    }
+                }
+                
+                if (!parts.summary && summaryLines.length > 0) {
+                    parts.summary = summaryLines.join(' ');
+                }
+                if (!parts.nonHolder && nonHolderLines.length > 0) {
+                    parts.nonHolder = nonHolderLines.join(' ');
+                }
+                if (!parts.holder && holderLines.length > 0) {
+                    parts.holder = holderLines.join(' ');
+                }
+            }
+
+            console.log('Final parsed parts:', parts);
+            return parts;
+        }
+
+        function displayIndicators(interpretedSignals, scores) {
+            const grid = document.getElementById('indicatorGrid');
+            grid.innerHTML = '';
+
+            Object.entries(interpretedSignals).forEach(([key, indicator]) => {
+                const signalClass = getSignalClass(indicator.signal);
+                const icon = getSignalIcon(indicator.signal);
+                const score = scores[key] || 0;
+                const scoreColor = getScoreColor(score);
+                
+                const card = document.createElement('div');
+                card.className = `card signal-card ${signalClass}`;
+                card.innerHTML = `
+                    <div class="card-body">
+                        <div class="indicator-header d-flex justify-content-between align-items-start mb-3">
+                            <div class="d-flex align-items-center">
+                                <i class="${icon} me-2"></i>
+                                <div>
+                                    <h6 class="card-title mb-1">${indicator.indicator_name}</h6>
+                                    <small class="text-muted">${indicator.type}</small>
+                                </div>
+                            </div>
+                            <span class="score-badge" style="background: ${scoreColor}; color: white; padding: 4px 8px; border-radius: 12px; font-weight: bold; font-size: 0.9em;">
+                                ${score > 0 ? '+' : ''}${score}
+                            </span>
+                        </div>
+                        
+                        <div class="indicator-description mb-3">
+                            <p class="text-muted small mb-0">${getIndicatorDescription(key)}</p>
+                        </div>
+                        
+                        <div class="indicator-result">
+                            <div class="result-label small text-muted mb-1">분석 결과:</div>
+                            <div class="result-value ${signalClass}" style="font-weight: bold; font-size: 1.1em; padding: 8px 12px; border-radius: 8px; background: ${getSignalBackgroundColor(signalClass)};">
+                                ${indicator.description}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function getIndicatorDescription(indicator) {
+            const descriptions = {
+                'RSI': '주가가 과매수/과매도 상태인지 판단',
+                'MACD': '단기/장기 이동평균의 차이로 추세 방향 확인',
+                'MA_CROSSOVER': '단기/장기 이동평균 교차로 추세 전환 감지',
+                'ADX': '현재 추세가 얼마나 강한지 측정',
+                'BREAKOUT': '주요 저항/지지선 돌파 여부 확인',
+                'ATR': '주가의 변동성이 얼마나 큰지 측정',
+                'VWAP': '거래량을 고려한 공정가치 대비 현재가 위치'
+            };
+            return descriptions[indicator] || '기술적 분석 지표';
+        }
+
+        function getSignalBackgroundColor(signalClass) {
+            const colors = {
+                'signal-buy': 'rgba(40, 167, 69, 0.1)',
+                'signal-sell': 'rgba(220, 53, 69, 0.1)',
+                'signal-trending': 'rgba(255, 193, 7, 0.1)',
+                'signal-neutral': 'rgba(108, 117, 125, 0.1)',
+                'signal-insufficient': 'rgba(255, 193, 7, 0.1)'
+            };
+            return colors[signalClass] || 'rgba(108, 117, 125, 0.1)';
+        }
+
+        function getSignalClass(signal) {
+            if (signal.includes('STRONG_BUY') || signal.includes('STRONG_BULLISH') || signal.includes('STRONG_GOLDEN') || signal.includes('STRONG_BREAKOUT') || signal.includes('STRONG_VOLATILITY') || signal.includes('STRONG_UNDER') || signal.includes('STRONG_OVERSOLD')) {
+                return 'signal-buy';
+            } else if (signal.includes('WEAK_BUY') || signal.includes('WEAK_BULLISH') || signal.includes('WEAK_GOLDEN') || signal.includes('WEAK_BREAKOUT') || signal.includes('WEAK_VOLATILITY') || signal.includes('WEAK_UNDER') || signal.includes('WEAK_OVERSOLD')) {
+                return 'signal-buy';
+            } else if (signal.includes('STRONG_SELL') || signal.includes('STRONG_BEARISH') || signal.includes('STRONG_DEAD') || signal.includes('STRONG_BREAKDOWN') || signal.includes('STRONG_STABILITY') || signal.includes('STRONG_OVER') || signal.includes('STRONG_OVERBOUGHT')) {
+                return 'signal-sell';
+            } else if (signal.includes('WEAK_SELL') || signal.includes('WEAK_BEARISH') || signal.includes('WEAK_DEAD') || signal.includes('WEAK_BREAKDOWN') || signal.includes('WEAK_STABILITY') || signal.includes('WEAK_OVER') || signal.includes('WEAK_OVERBOUGHT')) {
+                return 'signal-sell';
+            } else if (signal.includes('TREND') || signal.includes('STRONG_TREND') || signal.includes('WEAK_TREND')) {
+                return 'signal-trending';
+            } else if (signal.includes('INSUFFICIENT_DATA')) {
+                return 'signal-insufficient';
+            }
+            return 'signal-neutral';
+        }
+
+        function getSignalIcon(signal) {
+            if (signal.includes('STRONG_BUY') || signal.includes('STRONG_BULLISH') || signal.includes('STRONG_GOLDEN') || signal.includes('STRONG_BREAKOUT') || signal.includes('STRONG_VOLATILITY') || signal.includes('STRONG_UNDER') || signal.includes('STRONG_OVERSOLD')) {
+                return 'fas fa-arrow-up text-success';
+            } else if (signal.includes('WEAK_BUY') || signal.includes('WEAK_BULLISH') || signal.includes('WEAK_GOLDEN') || signal.includes('WEAK_BREAKOUT') || signal.includes('WEAK_VOLATILITY') || signal.includes('WEAK_UNDER') || signal.includes('WEAK_OVERSOLD')) {
+                return 'fas fa-arrow-up text-info';
+            } else if (signal.includes('STRONG_SELL') || signal.includes('STRONG_BEARISH') || signal.includes('STRONG_DEAD') || signal.includes('STRONG_BREAKDOWN') || signal.includes('STRONG_STABILITY') || signal.includes('STRONG_OVER') || signal.includes('STRONG_OVERBOUGHT')) {
+                return 'fas fa-arrow-down text-danger';
+            } else if (signal.includes('WEAK_SELL') || signal.includes('WEAK_BEARISH') || signal.includes('WEAK_DEAD') || signal.includes('WEAK_BREAKDOWN') || signal.includes('WEAK_STABILITY') || signal.includes('WEAK_OVER') || signal.includes('WEAK_OVERBOUGHT')) {
+                return 'fas fa-arrow-down text-warning';
+            } else if (signal.includes('TREND') || signal.includes('STRONG_TREND') || signal.includes('WEAK_TREND')) {
+                return 'fas fa-chart-line text-warning';
+            } else if (signal.includes('INSUFFICIENT_DATA')) {
+                return 'fas fa-exclamation-triangle text-warning';
+            }
+            return 'fas fa-minus text-secondary';
+        }
+
+        function getRecommendationText(recommendation) {
+            const texts = {
+                'STRONG_BUY': '강력 매수',
+                'BUY': '매수',
+                'HOLD': '관망',
+                'SELL': '매도',
+                'STRONG_SELL': '강력 매도'
+            };
+            return texts[recommendation] || '관망';
+        }
+
+        function getScoreColor(score) {
+            if (score >= 3) return '#28a745'; // 강력 매수 - 초록
+            if (score >= 1) return '#17a2b8'; // 매수 - 파랑
+            if (score <= -3) return '#dc3545'; // 강력 매도 - 빨강
+            if (score <= -1) return '#fd7e14'; // 매도 - 주황
+            return '#6c757d'; // 관망 - 회색
+        }
+
+        // Enter 키로 분석 실행
+        document.getElementById('symbolInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                analyzeStock();
+            }
+        });
+
+        // 페이지 로드 시 기본 분석 실행
+        window.addEventListener('load', function() {
+            analyzeStock();
+        });
+    </script>
+</body>
+</html> 
